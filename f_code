@@ -1,0 +1,241 @@
+import cv2
+import importlib
+import utlis
+import pigpio
+importlib.reload(utlis)
+from time import sleep
+import RPi.GPIO as GPIO # using Rpi.GPIO module
+from time import sleep # import function sleep for delay
+GPIO.setmode(GPIO.BCM) # GPIO numbering
+GPIO.setwarnings(False) # enable warning from GPIO
+import time
+from picamera.array import PiRGBArray
+from picamera import PiCamera
+camera = PiCamera()
+camera.resolution = (480, 240)
+camera.framerate = 30
+rawCapture = PiRGBArray(camera, size=(480, 240))
+curveList = []
+avgVal=10
+servo = pigpio.pi()
+val = 0
+AN1 = 17 # set pwm1 pin on MD10-hat
+DIG1 = 27 # set dir1 pin on MD10-Hat
+GPIO.setup(AN1, GPIO.OUT) # set pin as output
+GPIO.setup(DIG1, GPIO.OUT) # set pin as output
+p1 = GPIO.PWM(AN1,1000) # set pwm for M1
+p1.start(0)
+GPIO.setup(2, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+
+def getLaneCurve(img,display=2):
+ global middlePoint
+
+ #### STEP 1
+ imgThres = utlis.thresholding(img)
+
+ ### STEP 2
+ hT,wT,c = img.shape
+ points = utlis.valTrackbars()
+ imgWarp = utlis.warpImg(imgThres,points,wT,hT)
+ imgWarpPoints= utlis.drawPoints(img, points)
+
+ ### STEP 3
+ middlePoint,imgHist= utlis.getHistogram(imgWarp,display=True, minPer=0.5, region=4)
+ curveAveragePoint, imgHist = utlis.getHistogram(imgWarp, display=True, minPer=0.9)
+ curveRaw=curveAveragePoint - middlePoint
+
+ '''
+ ### STEP 4
+ curveList.append(curveRaw)
+ if len(curveList)>avgVal:
+  curveList.pop(0)
+ curve=int(sum(curveList)/len(curveList))
+ '''
+
+ ### STEP 5
+ if display != 0:
+  #imgInvWarp = utlis.warpImg(imgWarp, points, wT, hT, inv=True)
+  #imgInvWarp = cv2.cvtColor(imgInvWarp, cv2.COLOR_GRAY2BGR)
+  #imgInvWarp[0:hT // 3, 0:wT] = 0, 0, 0
+  #imgLaneColor = np.zeros_like(img)
+  #imgLaneColor[:] = 255, 255, 255
+  #imgLaneColor = cv2.bitwise_and(imgInvWarp, imgLaneColor)
+  #imgResult = cv2.addWeighted(imgResult, 1, imgLaneColor, 1, 0)
+  #midY = 450
+  #cv2.putText(imgResult, str(curve), (wT // 2 - 80, 85), cv2.FONT_HERSHEY_COMPLEX, 2, (255, 0, 255),3)
+  #cv2.line(imgResult, (wT // 2, midY), (wT // 2 + (curve * 3), midY), (255, 0, 255), 5)
+  #cv2.line(imgResult, ((wT // 2 + (curve * 3)), midY - 25), (wT // 2 + (curve * 3), midY + 25), (0, 255, 0), 5)
+  #for x in range(-30, 30):
+   #w = wT // 20
+   #cv2.line(imgResult, (w * x + int(curve // 50), midY - 10),(w * x + int(curve // 50), midY + 10), (0, 0, 255), 2)
+ #fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer);
+ #cv2.putText(imgResult, 'FPS ' + str(int(fps)), (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (230, 50, 50),3);
+  if display == 2:
+    
+  #imgResult = cv2.resize(imgResult,(480,240))
+  #imgInvWarp = cv2.resize(imgInvWarp,(480,240))
+  #imgLaneColor = cv2.resize(imgLaneColor,(480,240))
+   imgHist = cv2.resize(imgHist,(480,240))
+   img = cv2.resize(img,(480,240))
+       
+        
+  #h1combine_vid = cv2.hconcat([img,img,imgInvWarp])
+  #h2combine_vid = cv2.hconcat([imgHist,imgLaneColor,imgResult])
+  vcombine_vid = cv2.vconcat([imgHist,img])
+  cv2.imshow("combined",vcombine_vid)
+        
+  #imgStacked = utlis.stackImages(0.7, ([img, imgWarpPoints, imgWarp],[imgHist, imgLaneColor, imgResult]))
+  #cv2.imshow('ImageStack', imgStacked)
+ elif display == 1:
+  
+  #imgResult = cv2.resize(imgResult,(480,240))
+  #imgInvWarp = cv2.resize(imgInvWarp,(480,240))
+  #imgLaneColor = cv2.resize(imgLaneColor,(480,240))
+  #imgHist = cv2.resize(imgHist,(480,240))
+  #img = cv2.resize(img,(480,240))
+       
+        
+  #h1combine_vid = cv2.hconcat([img,img,imgInvWarp])
+  #h2combine_vid = cv2.hconcat([imgHist,imgLaneColor,imgResult])
+  #vcombine_vid = cv2.vconcat([h1combine_vid,h2combine_vid])
+  #cv2.imshow("combined",vcombine_vid)
+        
+  #cv2.imshow('Resutlt', imgResult)
+ ### NORMALIZATION
+  '''
+  curve = curve/100
+  if curve>1: curve==1
+  if curve<-1: curve== -1
+   #cv2.imshow('Thres',imgThres)
+   #cv2.imshow('Warp', imgWarp)
+   #cv2.imshow('Warp Points', imgWarpPoints)
+   #cv2.imshow('Histogram', imgHist)
+ return curve
+ '''
+
+
+def movemotor1(val):
+ if val == 1:
+  GPIO.output(AN1, 1)
+  p1.start(15)
+  #p1.ChangeDutyCycle(40)
+ elif val == 0:
+  GPIO.output(AN1, 0)
+  p1.start(15)
+for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
+    img = frame.array
+    curve = getLaneCurve(img,display=2)
+    initialTrackBarVals = [120,100,20,240]
+    utlis.initializeTrackbars(initialTrackBarVals)
+    # show the frame
+    #cv2.imshow("Frame", img)
+    key = cv2.waitKey(1) & 0xFF
+
+    # clear the stream in preparation for the next frame
+    rawCapture.truncate(0)
+
+    # if the `q` key was pressed, break from the loop
+    if key == ord("q"):
+        break
+    time.sleep(0.1)
+
+    movemotor1(1)
+
+    #print(middlePoint)
+    curveOld=0
+ 
+    max_servo = 1 
+    min_servo =-1 
+  
+    val = 1400*(1-(middlePoint/480))+800
+    servo.set_servo_pulsewidth(23, val)
+
+'''
+if __name__ == '__main__':
+ cap = cv2.VideoCapture(-1)
+ cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m','j','p','g'))
+ #cap = cv2.VideoCapture("/home/pi/PC CODE/vid2.mp4")
+ initialTrackBarVals = [120,80,20,240]
+ utlis.initializeTrackbars(initialTrackBarVals)
+ frameCounter = 0
+
+ while True:
+  frameCounter += 1
+ 
+  
+  if cap.get(cv2.CAP_PROP_FRAME_COUNT) == frameCounter:
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    frameCounter = 0
+  
+  success, img = cap.read()
+  img = cv2.resize(img, (480, 240))
+  curve = getLaneCurve(img,display=2)
+
+  if cv2.waitKey(1) == ord ('q'):
+      break
+  cv2.destroyAllWindows
+ 
+  time.sleep(0.2)
+
+   movemotor1(1)
+
+  print(middlePoint)
+  curveOld=0
+ 
+  max_servo = 1 
+  min_servo =-1 
+  
+  val = 2000*(1-(middlePoint/480))+500
+  servo.set_servo_pulsewidth(23, val)
+
+  
+'''
+'''if 140 < middlePoint< 340: 
+    if middlePoint > 300 :
+       val = - 0.5
+       servo.value = val
+       #val = val-0.9
+       #print("1 =", servo.value)
+
+    elif middlePoint < 180 :
+       val = 0.5
+       servo.value = val
+       #val = val-0.9
+       #print("1 =", servo.value)
+    else:
+       val = 0 
+       servo.value=val
+
+
+  else:
+
+    if middlePoint > 300 :
+       val = - 1
+       servo.value = val
+       #val = val-0.9
+       #print("1 =", servo.value)
+      
+    elif middlePoint < 140 :
+       val= 1
+       servo.value = val
+       #-+val = val+0.5
+       #print("2 =", servo.value)'''
+
+    
+      
+""" if curve>5:
+      servo.set_servo_pulsewidth(23, 1000)
+      val = val+1
+  
+      if val > 1:
+          val = 0
+          
+  elif curve<-25:
+      servo.set_servo_pulsewidth(23, 2000)
+      val = val-1
+  
+      if val <-1:
+          val= 0
+"""
+          
+      
